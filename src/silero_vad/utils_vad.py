@@ -431,7 +431,7 @@ class VADIterator:
 
         self.model.reset_states()
         self.triggered = False
-        self.temp_end = 0
+        self.temp_end = 0 # 임시 종료 지점
         self.current_sample = 0
 
     @torch.no_grad()
@@ -455,9 +455,20 @@ class VADIterator:
 
         speech_prob = self.model(x, self.sampling_rate).item()
 
+        """
+        음성 -----> 무음 잠시 -> 음성 다시 시작
+                   ↑
+                   temp_end 설정
+                            ↑
+                            이 시점에서 temp_end 리셋
+        temp_end는 잠재적인 음성 종료 지점을 일시적으로 저장
+        하지만 짧은 무음 후 다시 음성이 시작되면
+        이전의 temp_end는 더 이상 유효하지 않으므로 리셋 필요
+        """
         if (speech_prob >= self.threshold) and self.temp_end:
             self.temp_end = 0
 
+        # 첫 음성 감지 시점을 처리
         if (speech_prob >= self.threshold) and not self.triggered:
             self.triggered = True
             speech_start = max(0, self.current_sample - self.speech_pad_samples - window_size_samples)
