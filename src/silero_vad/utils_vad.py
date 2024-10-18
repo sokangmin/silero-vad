@@ -430,6 +430,8 @@ class VADIterator:
     def reset_states(self):
 
         self.model.reset_states()
+        # triggered = False: 음성이 감지되지 않은 상태 (무음 상태)
+        # triggered = True: 음성이 감지된 상태 (음성 처리 중)
         self.triggered = False
         self.temp_end = 0 # 임시 종료 지점
         self.current_sample = 0
@@ -465,25 +467,44 @@ class VADIterator:
         하지만 짧은 무음 후 다시 음성이 시작되면
         이전의 temp_end는 더 이상 유효하지 않으므로 리셋 필요
         """
+        # 잠깐 무음 후 음성 다시 시작(음성 진행 중)
         if (speech_prob >= self.threshold) and self.temp_end:
             self.temp_end = 0
 
-        # 첫 음성 감지 시점을 처리
+        
+        """
+        무음 -----> 음성 시작
+                  ↑
+                  이 시점에서:
+                  triggered = True로 설정
+        """
+        # 음성 시작 감지
         if (speech_prob >= self.threshold) and not self.triggered:
             self.triggered = True
             speech_start = max(0, self.current_sample - self.speech_pad_samples - window_size_samples)
             return {'start': int(speech_start) if not return_seconds else round(speech_start / self.sampling_rate, 1)}
-
+        
+        # 음성 진행 중
+        if triggered and (speech_prob >= threshold):
+            # 계속 음성 처리 중
+            pass
+        
+        # 음성 종료
         if (speech_prob < self.threshold - 0.15) and self.triggered:
+            # 무음 시작 감지
             if not self.temp_end:
                 self.temp_end = self.current_sample
             if self.current_sample - self.temp_end < self.min_silence_samples:
                 return None
-            else:
+            else: # 발화종료
                 speech_end = self.temp_end + self.speech_pad_samples - window_size_samples
                 self.temp_end = 0
                 self.triggered = False
                 return {'end': int(speech_end) if not return_seconds else round(speech_end / self.sampling_rate, 1)}
+
+        # 무음 구간
+        if (speech_prob < self.threshold - 0.15) and not self.triggerd:
+            pass
 
         return None
 
